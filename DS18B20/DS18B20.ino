@@ -3,16 +3,70 @@
  *  Par Destroyedlolo, mis dans le Domaine Publique.
  */
 
+#include <ESP8266WiFi.h>
+#include <PubSubClient.h>	/* https://pubsubclient.knolleary.net/api.html */
+
 #include <OneWire.h>						// Gestion du bus 1-wire
 #include <DallasTemperature.h>	// Sondes ds18b20
 
+
 ADC_MODE(ADC_VCC);
+
+/****
+ * WiFi
+ ****/
+#include "Maison.h"	// Paramètres de mon réseau (WIFI_*, MQTT_*, ...)
+#define LED_BUILTIN 2
+
+void connexion_WiFi(){
+	WiFi.persistent( false );	// Supprime la sauvegarde des info WiFi en Flash
+	digitalWrite(LED_BUILTIN, LOW);
+	Serial.println("Connexion WiFi");
+	WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+	while(WiFi.status() != WL_CONNECTED){
+		delay(500);
+		Serial.print(".");
+	}
+
+	Serial.print("ok : adresse ");
+	Serial.println(WiFi.localIP());
+	digitalWrite(LED_BUILTIN, HIGH);
+}
+
+/*****
+ * MQTT
+ */
+#define MQTT_CLIENT "TestTemp"
+String MQTT_Topic("TestTemp/");
+
+	/* On n'utilise pas DHCP pour que ca aille plus vite */
+IPAddress adr_ip(192, 168, 0, 17);		// Duron (décommissionné)
+IPAddress adr_gateway(192, 168, 0, 10);
+IPAddress adr_dns(192, 168, 0, 3);
+
+WiFiClient clientWiFi;
+PubSubClient clientMQTT(clientWiFi);
+
+void Connexion_MQTT(){
+	digitalWrite(LED_BUILTIN, LOW);
+	Serial.println("Connexion MQTT");
+	while(!clientMQTT.connected()){
+		if(clientMQTT.connect(MQTT_CLIENT)){
+			Serial.println("connecté");
+			break;
+		} else {
+			Serial.print("Echec, rc:");
+			Serial.println(clientMQTT.state());
+			delay(1000);	// Test dans 1 seconde
+		}
+	}
+	digitalWrite(LED_BUILTIN, HIGH);
+}
 
 /******
  * 1-wire
  ******/
 #define ONE_WIRE_BUS D1	// Où est connecté le bus
-
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature DS18B20(&oneWire);
 
@@ -31,8 +85,16 @@ String Adr2String(DeviceAddress adr){	/* Convertie une adresse en chaine */
 
 void setup(){
 	Serial.begin(115200);	// débuging
+	pinMode(LED_BUILTIN, OUTPUT);	// La LED est allumée pendant la recherche de WiFi et MQTT
 	delay(10);	// Le temps que ça se stabilise
 
+	/* Configuration réseau */
+	WiFi.config(adr_ip, adr_gateway, adr_dns);
+	// WiFi.mode(WIFI_STA);
+	connexion_WiFi();
+	clientMQTT.setServer(BROKER_HOST, BROKER_PORT);
+
+	/* 1-wire */
 	Serial.print("Bus 1-wire utilisé :");
 	Serial.println(ONE_WIRE_BUS);
 
@@ -68,27 +130,37 @@ void setup(){
 }
 
 void loop(){
+	if(!clientMQTT.connected())
+		Connexion_MQTT();
+
 	Serial.print("Alimentation : ");
 	Serial.println(ESP.getVcc());
+	clientMQTT.publish( (MQTT_Topic + "Alim").c_str(), String( ESP.getVcc() ).c_str() );
 	
 	int duree = millis();
 	DS18B20.requestTemperatures();
 	Serial.print("La demande d'aquisition a durée ");
 	Serial.print( millis() - duree );
 	Serial.println(" milli-secondes");
-	
+
+	duree = millis();	// Ainsi, nous tentons de mesurer aussi les latences dues à la conversion
 	for(int i=0; i<nbr_sondes; i++){
-		duree = millis();
+		String adr = Adr2String( sondes_adr[i] );
+		float temp;
+
 		Serial.print("Température pour ");
-		Serial.print(Adr2String( sondes_adr[i] ));
+		Serial.print( adr );
 		Serial.print(" : ");
-		Serial.print(DS18B20.getTempC( sondes_adr[i]));
+		Serial.print( temp = DS18B20.getTempC( sondes_adr[i]));	
 		Serial.print("°C (");
 		Serial.print(DS18B20.getResolution(sondes_adr[i]));
 		Serial.print(" bits) en ");
 		Serial.print( millis() - duree );
 		Serial.println(" milli-secondes");
+
+		clientMQTT.publish( (MQTT_Topic + adr).c_str(), String( temp ).c_str() );
 		yield();
+		duree = millis();
 	}
 
 	delay(300e3);	// Prochaine mesure dans 5 minutes
