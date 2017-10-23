@@ -28,7 +28,7 @@ extern "C" {
 #define MODE_LIGHT_SLEEP 1	// Light Sleep
 #define MODE_DEEP_SLEEP	 2	// Deep sleep (les broches RST et D0 doivent être connectées)
 
-#define MODE MODE_LIGHT_SLEEP
+#define MODE MODE_DEEP_SLEEP
 
 #define SAVEWIFI	// essaie d'utiliser la sauvegarde faite dans la Flash de l'ESP.
 #define LED				// Allume la LED lors de la recherche du réseau et du MQTT
@@ -198,6 +198,7 @@ void loop() {
 	clientMQTT.loop();
 
 #if MODE == MODE_DEEP_SLEEP
+	ESP.deepSleep(DELAI * 1e6);	// Attention, l'unité est la µs
 #else	// Autres modes basés uniquement sur delay()
 	delay( DELAI * 1e3 );
 #endif
