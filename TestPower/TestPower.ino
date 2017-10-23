@@ -31,7 +31,8 @@ extern "C" {
 #define MODE MODE_LIGHT_SLEEP
 
 #define SAVEWIFI	// essaie d'utiliser la sauvegarde faite dans la Flash de l'ESP.
-#define LED		// Allume la LED lors de la recherche du réseau et du MQTT
+#define LED				// Allume la LED lors de la recherche du réseau et du MQTT
+#define AUTORECONNECT	// N'appelle pas explicitement WiFi.begin() : utilise l'auto-reconnection
 
 #define MQTT_CLIENT "TestESP"
 String MQTT_Topic("TestESP/");	// Racine des messages envoyés
@@ -71,7 +72,10 @@ unsigned long connexion_WiFi(){
 		/* Les infos de la connexion sont écrites à chaque fois dans la Flash :
 		 * on essaie dans un premier temps de les réutiliser avant d'en imposer des nouvelles. 
 		 */
+#	ifndef AUTORECONNECT
 	WiFi.begin();
+#	endif
+
 	for( int i=0; i< 120; i++ ){	// On essaie de se connecter pendant 1 minute
 		if(WiFi.status() == WL_CONNECTED)
 			break;
@@ -192,6 +196,10 @@ void loop() {
 		 * Permet aussi de prendre en charge les messages entrant.
 		 */
 	clientMQTT.loop();
-	delay( DELAI * 1e3 );	
+
+#if MODE == MODE_DEEP_SLEEP
+#else	// Autres modes basés uniquement sur delay()
+	delay( DELAI * 1e3 );
+#endif
 }
 
