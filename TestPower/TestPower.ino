@@ -24,6 +24,7 @@
 #define MODE_LIGHT_SLEEP 1	// Light Sleep
 #define MODE_DEEP_SLEEP	 2	// Deep sleep (les broches RST et D0 doivent être connectées)
 
+
 #define MODE MODE_AUCUN
 #define LED		// Allume la LED lors de la recherche du réseau et du MQTT
 
@@ -149,6 +150,12 @@ void loop() {
 	Serial.println(" ms");
 	clientMQTT.publish( (MQTT_Topic + "Alim/duree").c_str(), String( fin - debut ).c_str() );
 
+		/* En dessous d'une 20e de secondes, cette ligne permet
+		 *  de conserver la connexion avec le broker.
+		 *  Au delà, delà, la connexion est systématiquement réinitialisée
+		 * Permet aussi de prendre en charge les messages entrant.
+		 */
+	clientMQTT.loop();
 	delay( DELAI * 1e3 );	
 }
 
