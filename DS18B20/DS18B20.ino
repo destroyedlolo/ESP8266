@@ -9,6 +9,9 @@
 #include <OneWire.h>						// Gestion du bus 1-wire
 #include <DallasTemperature.h>	// Sondes ds18b20
 
+extern "C" {
+  #include "user_interface.h"
+}
 
 ADC_MODE(ADC_VCC);
 
@@ -90,7 +93,8 @@ void setup(){
 
 	/* Configuration réseau */
 	WiFi.config(adr_ip, adr_gateway, adr_dns);
-	// WiFi.mode(WIFI_STA);
+	WiFi.mode(WIFI_STA);
+	wifi_set_sleep_type(LIGHT_SLEEP_T);
 	connexion_WiFi();
 	clientMQTT.setServer(BROKER_HOST, BROKER_PORT);
 
@@ -130,14 +134,23 @@ void setup(){
 }
 
 void loop(){
-	if(!clientMQTT.connected())
+	int duree;
+	if(!clientMQTT.connected()){
+		duree = millis();
 		Connexion_MQTT();
+		int fin = millis();
+
+		Serial.print("La reconnexion a durée ");
+		Serial.print( fin - duree );
+		Serial.println(" milli-secondes");
+		clientMQTT.publish( (MQTT_Topic + "reconnect").c_str(), String( fin - duree ).c_str() );
+	}
 
 	Serial.print("Alimentation : ");
 	Serial.println(ESP.getVcc());
 	clientMQTT.publish( (MQTT_Topic + "Alim").c_str(), String( ESP.getVcc() ).c_str() );
 	
-	int duree = millis();
+	duree = millis();
 	DS18B20.requestTemperatures();
 	Serial.print("La demande d'aquisition a durée ");
 	Serial.print( millis() - duree );
