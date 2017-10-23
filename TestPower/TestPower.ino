@@ -15,6 +15,10 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 
+extern "C" {
+  #include "user_interface.h"
+}
+
 	/****
 	 * Parametrages
 	 ****/
@@ -24,8 +28,9 @@
 #define MODE_LIGHT_SLEEP 1	// Light Sleep
 #define MODE_DEEP_SLEEP	 2	// Deep sleep (les broches RST et D0 doivent être connectées)
 
+#define MODE MODE_LIGHT_SLEEP
 
-#define MODE MODE_AUCUN
+#define SAVEWIFI	// essaie d'utiliser la sauvegarde faite dans la Flash de l'ESP.
 #define LED		// Allume la LED lors de la recherche du réseau et du MQTT
 
 #define MQTT_CLIENT "TestESP"
@@ -54,7 +59,6 @@ unsigned long dwifi;	// Combien de temps à duré l'initialisation du Wifi
 
 unsigned long connexion_WiFi(){
 	unsigned long debut, fin;
-	WiFi.persistent( false );	// Supprime la sauvegarde des info WiFi en Flash
 
 #	ifdef LED
 		digitalWrite(LED_BUILTIN, LOW);
@@ -62,15 +66,42 @@ unsigned long connexion_WiFi(){
 
 	Serial.println("Connexion WiFi");
 	debut = millis();
+
+#ifdef SAVEWIFI
+		/* Les infos de la connexion sont écrites à chaque fois dans la Flash :
+		 * on essaie dans un premier temps de les réutiliser avant d'en imposer des nouvelles. 
+		 */
+	WiFi.begin();
+	for( int i=0; i< 120; i++ ){	// On essaie de se connecter pendant 1 minute
+		if(WiFi.status() == WL_CONNECTED)
+			break;
+		delay(500);
+		Serial.print("-");
+	}
+
+	if(WiFi.status() != WL_CONNECTED){	// La connexion a échoué, on force les settings
+		WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+		while(WiFi.status() != WL_CONNECTED){
+			delay(500);
+			Serial.print(".");
+		}
+	}
+#else
+	WiFi.persistent( false );	// Supprime la sauvegarde des info WiFi en Flash
+
 	WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 	while(WiFi.status() != WL_CONNECTED){
 		delay(500);
 		Serial.print(".");
 	}
+#endif
+
 	fin = millis();
 
-	Serial.print("ok : adresse ");
-	Serial.println(WiFi.localIP());
+	Serial.println("ok");
+	WiFi.printDiag( Serial );
+	Serial.print("AutoConnect : ");
+	Serial.println(WiFi.getAutoConnect() ? "Oui" : "Non");
 
 #	ifdef LED
 		digitalWrite(LED_BUILTIN, HIGH);
@@ -118,7 +149,12 @@ void setup(){
 
 		/* Configuration réseau */
 	WiFi.config(adr_ip, adr_gateway, adr_dns);
-	WiFi.mode(WIFI_STA);
+#	if MODE == MODE_LIGHT_SLEEP
+		wifi_set_sleep_type(LIGHT_SLEEP_T);
+#	else
+		wifi_set_sleep_type(MODEM_SLEEP_T);
+#	endif
+//	WiFi.mode(WIFI_STA);
 	dwifi = connexion_WiFi();
 	clientMQTT.setServer(BROKER_HOST, BROKER_PORT);
 }
@@ -133,11 +169,11 @@ void loop() {
 		Serial.print("La reconnexion a durée ");
 		Serial.print( fin - debut );
 		Serial.println(" milli-secondes");
-		clientMQTT.publish( (MQTT_Topic + "reconnect").c_str(), String( fin - debut ).c_str() );
 		if(dwifi){
 			clientMQTT.publish( (MQTT_Topic + "Wifi").c_str(), String( dwifi ).c_str() );
 			dwifi = 0;
 		}
+		clientMQTT.publish( (MQTT_Topic + "reconnect").c_str(), String( fin - debut ).c_str() );
 	}
 
 	Serial.print("Alimentation : ");
