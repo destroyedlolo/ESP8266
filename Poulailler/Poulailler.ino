@@ -10,8 +10,6 @@
  */
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
 
 extern "C" {
   #include "user_interface.h"
@@ -44,10 +42,10 @@ String MQTT_Topic("Poulailler/");	// Topic root
 #define ONE_WIRE_BUS D1	// Where D1 bus is connected to
 
 	/* Probes */
-#include "Probe.h"
+#include "TemperatureProbe.h"
 
-Probe ptemperatures[] = {
-	Probe( "TestTemp", (DeviceAddress){ 0x28, 0x82, 0xb2, 0x5e, 0x09, 0x00, 0x00, 0x15 })	
+TemperatureProbe ptemperatures[] = {
+	TemperatureProbe( "TestTemp", (DeviceAddress){ 0x28, 0x82, 0xb2, 0x5e, 0x09, 0x00, 0x00, 0x15 })	
 };
 
 
@@ -62,7 +60,7 @@ WiFiClient clientWiFi;
 PubSubClient clientMQTT(clientWiFi);
 
 OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature DSTemp(&oneWire);
+// DallasTemperature DSTempBus(&oneWire);
 
 bool startWiFi( class Duration &d ){
 	Serial.println("Starting WiFi");
@@ -129,10 +127,30 @@ void setup() {
 	Serial.print("MQTT connection duration :");
 	Serial.println( *dmqtt );
 	clientMQTT.publish( (MQTT_Topic + "Wifi").c_str(), String( *dwifi ).c_str() );
-	clientMQTT.publish( (MQTT_Topic + "MQTT").c_str(), String( *dmqtt ).c_str() );
+	clientMQTT.publish( (MQTT_Topic + "MQTT/Connection").c_str(), String( *dmqtt ).c_str() );
+
+	TemperatureProbe::Init(oneWire);
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
+	Serial.print("Power : ");
+	Serial.println(ESP.getVcc());
+	clientMQTT.publish( (MQTT_Topic + "Alim").c_str(), String( ESP.getVcc() ).c_str() );
 
+//	clientMQTT.loop();	// For incoming topics
+
+	Serial.print("Number of temperature probe to read : ");
+	Serial.println(sizeof(ptemperatures)/sizeof(*ptemperatures));
+
+	Duration owd;
+	TemperatureProbe::requestTemperatures();
+	for(int i=0; i < sizeof(ptemperatures)/sizeof(*ptemperatures); i++){
+		String t = String(ptemperatures[i].getTempC());
+		clientMQTT.publish( (MQTT_Topic + ptemperatures[i].AddressString()).c_str(), t.c_str() );
+		Serial.print( ptemperatures[i].AddressString() + " : " + t + " / " );
+		Serial.println( ptemperatures[i].getResolution() );
+	}
+	clientMQTT.publish( (MQTT_Topic + "MQTT").c_str(), String( *owd ).c_str() );
+
+	ESP.deepSleep(DELAY * 1e6);
 }

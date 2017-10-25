@@ -4,6 +4,7 @@
  */
 
 #include <OneWire.h>
+#include <DallasTemperature.h>	// Because of DeviceAddress (stupid)
 
 class Probe {
 	DeviceAddress &addr;
@@ -16,5 +17,13 @@ class Probe {
 
 	const char *getName() { return name; };
 	DeviceAddress &getAddr() { return addr; };
+	String AddressString(){
+		String str;
+		for(int i=0; i<8; i++){
+			if(addr[i]<16) str += '0';	// Padding si necessaire
+			str += String(addr[i], HEX);
+		}
+		return str;
+	}
 };
 
