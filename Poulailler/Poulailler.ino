@@ -44,18 +44,7 @@ String MQTT_Topic("Poulailler/");	// Topic root
 #define ONE_WIRE_BUS D1	// Where D1 bus is connected to
 
 	/* Probes */
-class Probe {
-	DeviceAddress &addr;
-	const char *name;
-
-	public :
-		Probe(const char *aname, DeviceAddress &aaddr) : addr( aaddr ) {
-			name = aname;
-		}
-
-	const char *getName() { return name; };
-	DeviceAddress &getAddr() { return addr; };
-};
+#include "Probe.h"
 
 Probe ptemperatures[] = {
 	Probe( "TestTemp", (DeviceAddress){ 0x28, 0x82, 0xb2, 0x5e, 0x09, 0x00, 0x00, 0x15 })	
@@ -65,15 +54,7 @@ Probe ptemperatures[] = {
 	/* End of configuration area
 	 * Let's go !
 	 */
-class Duration {
-	unsigned long int start, stop;
-
-	public:
-		Duration( void ) : stop(0) { reInit(); }
-		void reInit( void ) { start = millis(); }
-		unsigned long int Finished( void ){ stop = millis(); return (stop - start); }
-		unsigned long int operator *( void ){ return( (stop ? stop : millis()) - start ); }
-};
+#include "Duration.h"
 
 ADC_MODE(ADC_VCC);
 
