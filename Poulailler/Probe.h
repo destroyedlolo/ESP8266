@@ -17,13 +17,18 @@ class Probe {
 
 	const char *getName() { return name; };
 	DeviceAddress &getAddr() { return addr; };
-	String AddressString(){
+
+	static String AddressString( DeviceAddress &addr ){
 		String str;
 		for(int i=0; i<8; i++){
 			if(addr[i]<16) str += '0';	// Padding si necessaire
 			str += String(addr[i], HEX);
 		}
 		return str;
+	}
+
+	String AddressString(){
+		return this->AddressString(addr);
 	}
 };
 
