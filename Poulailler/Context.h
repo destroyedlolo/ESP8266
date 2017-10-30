@@ -5,7 +5,7 @@
 
 class Context {
 public:
-	enum Network { MAISON, DOMOTIQUE };
+	enum Network { SAFE, MAISON, DOMOTIQUE  };
 
 private:
 	struct {
@@ -36,10 +36,6 @@ private:
 
 public:
 	Context(){
-#ifdef DEV_ONLY
-		Serial.print("RTC data size : ");
-		Serial.println(sizeof(rtcData));
-#endif
 
 		if(ESP.rtcUserMemoryRead(0, (uint32_t*) &rtcData, sizeof(rtcData))){
 			if( rtcData.crc32 == crc32() ){
@@ -52,7 +48,7 @@ public:
 
 		Serial.println("Invalid context\nReseting to default");
 		rtcData.dt.first = true;
-		rtcData.dt.which_net = MAISON;
+		rtcData.dt.which_net = SAFE;
 	}
 
 	void save(){
@@ -60,6 +56,8 @@ public:
 		ESP.rtcUserMemoryWrite(0, (uint32_t*) &rtcData, sizeof(rtcData));
 #ifdef DEV_ONLY
 		Serial.println("Context saved");
+		Serial.print("RTC data size : ");
+		Serial.println(sizeof(rtcData));
 #endif
 	}
 
@@ -67,5 +65,5 @@ public:
 	void hasrun() { rtcData.dt.first = false; }
 
 	void setNetwork( enum Network n ){ rtcData.dt.which_net = n; }
-	enum Network getWhichNet(){ return rtcData.dt.which_net; }
+	enum Network getNetwork(){ return rtcData.dt.which_net; }
 };

@@ -35,12 +35,6 @@ IPAddress adr_ip(192, 168, 0, 17);	// Static IP to avoid DHCP delay
 IPAddress adr_gateway(192, 168, 0, 10);
 IPAddress adr_dns(192, 168, 0, 3);
 
-String Wssid, Wpwd;		// Network active parameters
-void defaultWiFi(){
-	Wssid = WIFI_SSID;
-	Wpwd = WIFI_PASSWORD;
-}
-
 	/* MQTT */
 #define MQTT_CLIENT "Poulailler"
 String MQTT_Topic("Poulailler/");	// Topic root
@@ -77,28 +71,50 @@ PubSubClient clientMQTT(clientWiFi);
 OneWire oneWire(ONE_WIRE_BUS);
 // DallasTemperature DSTempBus(&oneWire);
 
-bool startWiFi( class Duration &d ){
-	if(!Wssid.length())	// First run
-		defaultWiFi();
+CommandLine cmdline;
+Context ctx;
+unsigned long last = 0;	// Last time data has been sent
 
-	Serial.println("Starting WiFi");
+bool startMAISON(){	// Start WiFi with home network
+	Serial.println("Home network");
 
-	d.reInit();
-	for( int i=0; i< 120; i++ ){	// Trying with autoconnect
+	WiFi.begin( WIFI_SSID, WIFI_PASSWORD );
+	for( int i=0; i< 240; i++ ){
 		if(WiFi.status() == WL_CONNECTED)
-			break;
+			return true;
+		delay(500);
+		Serial.print(".");
+	}
+	return false;
+}
+
+bool startDOMOTIQUE(){	// Start WiFi with domotique network
+	Serial.println("Domotique network");
+
+	WiFi.begin( DOMO_SSID, DOMO_PASSWORD );
+	for( int i=0; i< 240; i++ ){
+		if(WiFi.status() == WL_CONNECTED)
+			return true;
 		delay(500);
 		Serial.print("-");
 	}
+	return false;
+}
 
-	if(WiFi.status() != WL_CONNECTED){	// Failed, starting manually
-		WiFi.begin(Wssid.c_str(), Wpwd.c_str());
-		for( int i=0; i< 240; i++ ){
-			if(WiFi.status() == WL_CONNECTED)
-				break;
-			delay(500);
-			Serial.print(".");
-		}
+bool startWiFi( class Duration &d ){
+	Serial.println("Starting WiFi");
+
+	d.reInit();
+	switch(ctx.getNetwork()){
+	case Context::MAISON:
+		startMAISON();
+		break;
+	case Context::DOMOTIQUE:
+		startDOMOTIQUE();
+		break;
+	default :	// Safe scenario
+		if(!startDOMOTIQUE())
+			startMAISON();
 	}
 	d.Finished();
 	
@@ -138,6 +154,7 @@ void setup() {
 	Duration dwifi, dmqtt;
 
 	Serial.begin(115200);
+	delay(100);
 	pinMode(LED_BUILTIN, OUTPUT);
 	clientMQTT.setServer(BROKER_HOST, BROKER_PORT);
 
@@ -181,10 +198,6 @@ void publishData(){
 	}
 	clientMQTT.publish( (MQTT_Topic + "MQTT").c_str(), String( *owd ).c_str() );
 }
-
-CommandLine cmdline;
-Context ctx;
-unsigned long last = 0;	// Last time data has been sent
 
 void CommandLine::loop(){	// Implement command line
 	String cmd = Serial.readString();
