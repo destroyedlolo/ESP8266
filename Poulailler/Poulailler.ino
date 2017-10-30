@@ -19,6 +19,8 @@ extern "C" {
 	 * Parameters
 	 ******/
 
+#define DEV_ONLY	/* Developpment only code */
+
 	/* LED */
 #define LED_BUILTIN 2	// On my ESP-12
 #if 1					// Led is lightning during Wifi / Mqtt connection establishment
@@ -65,6 +67,7 @@ TemperatureProbe ptemperatures[] = {
 	 */
 #include "Duration.h"
 #include "CommandLine.h"
+#include "Context.h"
 
 ADC_MODE(ADC_VCC);
 
@@ -180,6 +183,7 @@ void publishData(){
 }
 
 CommandLine cmdline;
+Context ctx;
 unsigned long last = 0;	// Last time data has been sent
 
 void CommandLine::loop(){	// Implement command line
@@ -208,7 +212,8 @@ void CommandLine::loop(){	// Implement command line
 }
 
 void loop(){
-	if( !last ){	// 1st run, let a chance to enter in interactive mode
+	if( ctx.isfirstrun() ){	// 1st run, let a chance to enter in interactive mode
+		ctx.hasrun();
 		publishData();
 		last = millis();
 		delay( DELAY_STARTUP * 1e3);
@@ -231,6 +236,7 @@ void loop(){
 			last = millis();
 			return;
 		}
+		ctx.save();
 		Serial.println("Going to sleep ...");
 		ESP.deepSleep(DELAY * 1e6);
 	}
