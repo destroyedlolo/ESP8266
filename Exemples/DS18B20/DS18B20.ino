@@ -1,13 +1,18 @@
 /* Test d'acquisition de température par 1-wire
- *  
+ *
+ *	25/10/2017 - Première version
+ *	05/11/2017 - Ménage dans le code, passe à OWBus
+ *
  *  Par Destroyedlolo, mis dans le Domaine Publique.
+ *	Les explications sur le code : http://destroyedlolo.info/ESP/Temperature/
  */
 
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>	/* https://pubsubclient.knolleary.net/api.html */
 
-#include <OneWire.h>						// Gestion du bus 1-wire
-#include <DallasTemperature.h>	// Sondes ds18b20
+#include <OWBus.h>
+#include <OWBus/DS18B20.h>
+#include <OWBus/DS28EA00.h>
 
 extern "C" {
   #include "user_interface.h"
@@ -22,7 +27,6 @@ ADC_MODE(ADC_VCC);
 #define LED_BUILTIN 2
 
 void connexion_WiFi(){
-	WiFi.persistent( false );	// Supprime la sauvegarde des info WiFi en Flash
 	digitalWrite(LED_BUILTIN, LOW);
 	Serial.println("Connexion WiFi");
 	WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -42,10 +46,12 @@ void connexion_WiFi(){
 #define MQTT_CLIENT "TestTemp"
 String MQTT_Topic("TestTemp/");
 
-	/* On n'utilise pas DHCP pour que ca aille plus vite */
+#if 0
+	/* Pour accéléré la connexion, on peut se passer du DNS */
 IPAddress adr_ip(192, 168, 0, 17);		// Duron (décommissionné)
 IPAddress adr_gateway(192, 168, 0, 10);
 IPAddress adr_dns(192, 168, 0, 3);
+#endif
 
 WiFiClient clientWiFi;
 PubSubClient clientMQTT(clientWiFi);
@@ -71,20 +77,11 @@ void Connexion_MQTT(){
  ******/
 #define ONE_WIRE_BUS D1	// Où est connecté le bus
 OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature DS18B20(&oneWire);
 
 	/* Gestion individualisée des sondes */
 int nbr_sondes;	// Combien avons nous trouvé de sondes ?
-DeviceAddress *sondes_adr;	// pour stocker les adresses des sondes
-
-String Adr2String(DeviceAddress adr){	/* Convertie une adresse en chaine */
-	String str;
-	for(int i=0; i<8; i++){
-		if(adr[i]<16) str += '0';	// Padding si necessaire
-		str += String(adr[i], HEX);
-	}
-	return str;
-}
+DS18B20 **sondes;	// pour stocker les sondes
+OWBus bus(&oneWire);
 
 void setup(){
 	Serial.begin(115200);	// débuging
@@ -92,9 +89,11 @@ void setup(){
 	delay(10);	// Le temps que ça se stabilise
 
 	/* Configuration réseau */
+#if 0	// sans DNS
 	WiFi.config(adr_ip, adr_gateway, adr_dns);
-	WiFi.mode(WIFI_STA);
-	wifi_set_sleep_type(LIGHT_SLEEP_T);
+	WiFi.mode(WIFI_STA);	// Par sécurité
+#endif
+	wifi_set_sleep_type(LIGHT_SLEEP_T);	// Le mode le moins consommateur hormis d'utiliser le "deep sleep".
 	connexion_WiFi();
 	clientMQTT.setServer(BROKER_HOST, BROKER_PORT);
 
@@ -102,32 +101,50 @@ void setup(){
 	Serial.print("Bus 1-wire utilisé :");
 	Serial.println(ONE_WIRE_BUS);
 
-	/* Sondes DS18B20 */
-	DS18B20.begin();
-
 	Serial.print("Nombre de sondes :");
-	Serial.println(nbr_sondes = DS18B20.getDeviceCount());
+	Serial.println(nbr_sondes = bus.getDeviceCount());
 
-	if(!(sondes_adr = (DeviceAddress *)malloc( sizeof(DeviceAddress) * nbr_sondes))){
-		Serial.println("Impossible d'allouer les adresses des sondes.\nSTOP !");
+	if(!(sondes = (DS18B20 **)malloc( sizeof(DS18B20 *) * nbr_sondes))){
+		Serial.println("Impossible d'allouer les sondes.\nSTOP !");
 		ESP.deepSleep(0);	// On s'arrete là
 	}
-	Serial.println("Le stockage des adresses des sondes est alloué");
+	Serial.println("Le stockage des sondes est alloué");
 
 	int duree = millis();
-	for(int i=0; i<nbr_sondes; i++){
-		if(DS18B20.getAddress(sondes_adr[i], i)){
-			Serial.print("Sonde ");
-			Serial.print(i);
-			Serial.print(": ");
-			Serial.println(Adr2String( sondes_adr[i] ));
-			DS18B20.setResolution( sondes_adr[i], i ? 12:9);
-		} else {
-			Serial.print("Impossible de lire l'adresse de la Sonde ");
-			Serial.println(i);
+	OWBus::Address addr;
+	bus.search_reset();
+	int i = 0;
+	while( bus.search_next( addr ) ){
+		Serial.print( addr.toString().c_str() );
+		Serial.print(" : ");
+		if(!addr.isValid( &oneWire))
+			Serial.println("Invalid address");
+		else {
+			if(i > nbr_sondes){
+				Serial.println("Hum, plus le même nombre de sondes.\nStop !");
+				ESP.deepSleep(0);	// On s'arrete là
+			}
+			switch(addr.getFamillyCode()){
+			case DS18B20::FAMILLY_CODE:
+				sondes[i] = new DS18B20( bus, addr );
+				break;
+			case DS28EA00::FAMILLY_CODE:
+				sondes[i] = new DS28EA00( bus, addr );
+				break;
+			default:
+				Serial.print( addr.getFamilly() );
+				Serial.println(" n'est pas prise en compte");
+				continue;	// on passe à la suivante
+			}
+			Serial.println( sondes[i]->getFamilly() );
+			sondes[i]->setResolution( i ? 12:9 );
+
+			i++;
 		}
 		yield();
 	}
+	nbr_sondes = i;
+
 	Serial.print("La lecture des sondes à durée ");
 	Serial.print( millis() - duree );
 	Serial.println(" milli-secondes");
@@ -151,27 +168,28 @@ void loop(){
 	clientMQTT.publish( (MQTT_Topic + "Alim").c_str(), String( ESP.getVcc() ).c_str() );
 	
 	duree = millis();
-	DS18B20.requestTemperatures();
-	Serial.print("La demande d'aquisition a durée ");
+	bus.launchTemperatureAcquisition();	// broadcaste une demande d'acquisition de température
+	delay(750);	// Laissons le temps à la conversion de se faire
+
+	Serial.print("La demande d'acquisition a durée ");
 	Serial.print( millis() - duree );
 	Serial.println(" milli-secondes");
 
 	duree = millis();	// Ainsi, nous tentons de mesurer aussi les latences dues à la conversion
 	for(int i=0; i<nbr_sondes; i++){
-		String adr = Adr2String( sondes_adr[i] );
 		float temp;
 
 		Serial.print("Température pour ");
-		Serial.print( adr );
+		Serial.print( sondes[i]->getAddress().toString() );
 		Serial.print(" : ");
-		Serial.print( temp = DS18B20.getTempC( sondes_adr[i]));	
+		Serial.print( temp = sondes[i]->readLastTemperature() );	
 		Serial.print("°C (");
-		Serial.print(DS18B20.getResolution(sondes_adr[i]));
+		Serial.print( sondes[i]->getResolution() );
 		Serial.print(" bits) en ");
 		Serial.print( millis() - duree );
 		Serial.println(" milli-secondes");
 
-		clientMQTT.publish( (MQTT_Topic + adr).c_str(), String( temp ).c_str() );
+		clientMQTT.publish( (MQTT_Topic + sondes[i]->getAddress().toString()).c_str(), String( temp ).c_str() );
 		yield();
 		duree = millis();
 	}
