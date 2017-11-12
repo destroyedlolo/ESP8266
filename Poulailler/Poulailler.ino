@@ -7,6 +7,7 @@
  *	
  *	History :
  *	25/10/2017 - Temperature probe only
+ *	12/11/2017 - Switch to OWLib
  */
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
@@ -20,9 +21,10 @@ extern "C" {
 	 ******/
 
 #define DEV_ONLY	/* Developpment only code */
+/*#define STATIC_IP*/	/* Use static IP when on domestik network */
 
 	/* LED */
-#define LED_BUILTIN 2	// On my ESP-12
+// #define LED_BUILTIN 2	// On my ESP-12
 #if 1					// Led is lightning during Wifi / Mqtt connection establishment
 #	define LED(x)	{ digitalWrite(LED_BUILTIN, x); }
 #else
@@ -31,9 +33,12 @@ extern "C" {
 
 	/* Network */
 #include "Maison.h"		// My very own environment (WIFI_*, MQTT_*, ...)
+
+#ifdef STATIC_IP
 IPAddress adr_ip(192, 168, 0, 17);	// Static IP to avoid DHCP delay
 IPAddress adr_gateway(192, 168, 0, 10);
 IPAddress adr_dns(192, 168, 0, 3);
+#endif
 
 	/* MQTT */
 #define MQTT_CLIENT "Poulailler"
@@ -46,15 +51,19 @@ String MQTT_Topic("Poulailler/");	// Topic root
 #define FAILUREDELAY	900		// Delay in case of failure (15 minutes)
 
 	/* 1-wire */
-#define ONE_WIRE_BUS D1	// Where D1 bus is connected to
+#include <OWBus.h>
+
+// #define ONE_WIRE_BUS D1	// Where OW bus is connected to (ESP-12)
+#define ONE_WIRE_BUS 2 // Where OW bus is connected to (ESP-201)
+OneWire oneWire(ONE_WIRE_BUS);	// Initialize oneWire library
+OWBus bus(&oneWire);
 
 	/* Probes */
-#include "TemperatureProbe.h"
+#include <OWBus/DS18B20.h>
 
-TemperatureProbe ptemperatures[] = {
-	TemperatureProbe( "TestTemp", (DeviceAddress){ 0x28, 0x82, 0xb2, 0x5e, 0x09, 0x00, 0x00, 0x15 })	
+OWDevice *probes[] = {
+	new DS18B20( bus, 0x2882b25e09000015, "TestTemp" )
 };
-
 
 	/* End of configuration area
 	 * Let's go !
@@ -68,9 +77,6 @@ ADC_MODE(ADC_VCC);
 WiFiClient clientWiFi;
 PubSubClient clientMQTT(clientWiFi);
 
-OneWire oneWire(ONE_WIRE_BUS);
-// DallasTemperature DSTempBus(&oneWire);
-
 CommandLine cmdline;
 Context ctx;
 unsigned long last = 0;	// Last time data has been sent
@@ -78,6 +84,9 @@ unsigned long last = 0;	// Last time data has been sent
 bool startMAISON(){	// Start WiFi with home network
 	Serial.println("Home network");
 
+#if STATIC_IP
+	WiFi.config(adr_ip, adr_gateway, adr_dns);
+#endif
 	WiFi.begin( WIFI_SSID, WIFI_PASSWORD );
 	for( int i=0; i< 240; i++ ){
 		if(WiFi.status() == WL_CONNECTED)
@@ -169,7 +178,6 @@ void setup() {
 	Serial.println( *dwifi );
 	clientMQTT.publish( (MQTT_Topic + "Wifi").c_str(), String( *dwifi ).c_str() );
 	publishMQTTDuration( dmqtt );
-	TemperatureProbe::Init(oneWire);
 }
 
 void publishData(){
@@ -186,15 +194,19 @@ void publishData(){
 //	clientMQTT.loop();	// For incoming topics
 
 	Serial.print("Number of temperature probe to read : ");
-	Serial.println(sizeof(ptemperatures)/sizeof(*ptemperatures));
+	Serial.println(sizeof(probes)/sizeof(*probes));
 
 	Duration owd;
-	TemperatureProbe::requestTemperatures();
-	for(int i=0; i < sizeof(ptemperatures)/sizeof(*ptemperatures); i++){
-		String t = String(ptemperatures[i].getTempC());
-		clientMQTT.publish( (MQTT_Topic + ptemperatures[i].AddressString()).c_str(), t.c_str() );
-		Serial.print( ptemperatures[i].AddressString() + " : " + t + " / " );
-		Serial.println( ptemperatures[i].getResolution() );
+	bus.launchTemperatureAcquisition( true );	// Launch in parallel temperature acquisition
+	delay(1e3);	// Wait a second to let all conversion to finish
+	for(int i=0; i < sizeof(probes)/sizeof(*probes); i++){
+		if( probes[i]->getOWCapability() & OWDevice::OWCapabilities::TEMPERATURE ){
+			DS18B20 *p = static_cast <DS18B20 *> (probes[i]);
+			String t = String(p->readLastTemperature());
+			clientMQTT.publish( (MQTT_Topic + p->getName()).c_str(), t.c_str() );
+			Serial.print( p->getName() + " : " + t + " / " );
+			Serial.println( p->getResolution() );
+		}
 	}
 	clientMQTT.publish( (MQTT_Topic + "MQTT").c_str(), String( *owd ).c_str() );
 }
@@ -207,6 +219,7 @@ void CommandLine::loop(){	// Implement command line
 		return;
 	} else if(cmd == "1wscan"){
 			/* TO BE REVIEWED with a better 1w handling */
+/*
 		DallasTemperature bus( &oneWire );
 		bus.begin();
 
@@ -218,6 +231,7 @@ void CommandLine::loop(){	// Implement command line
 			bus.getAddress(addr, i);
 			Serial.println(Probe::AddressString( addr ));
 		}
+*/
 	} else
 		Serial.println("Known commands : 1wscan, bye");
 

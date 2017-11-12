@@ -48,7 +48,7 @@ public:
 
 		Serial.println("Invalid context\nReseting to default");
 		rtcData.dt.first = true;
-		rtcData.dt.which_net = SAFE;
+		rtcData.dt.which_net = /* SAFE */ MAISON;	/* Trying without hop */
 	}
 
 	void save(){

@@ -1,4 +1,0 @@
-Totally change the way 1-wire is handled
-- Create a class to handle the bus
-- Create ds18b20 class
-- Create ds28ea00 class
