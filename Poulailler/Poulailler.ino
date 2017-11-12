@@ -191,6 +191,10 @@ void publishData(){
 	Serial.println(ESP.getVcc());
 	clientMQTT.publish( (MQTT_Topic + "Alim").c_str(), String( ESP.getVcc() ).c_str() );
 
+	Serial.print("Memory : ");
+	Serial.println(ESP.getFreeHeap());
+	clientMQTT.publish( (MQTT_Topic + "Memory").c_str(), String( ESP.getFreeHeap() ).c_str() );
+
 //	clientMQTT.loop();	// For incoming topics
 
 	Serial.print("Number of temperature probe to read : ");
