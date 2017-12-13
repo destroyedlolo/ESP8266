@@ -12,7 +12,7 @@ int pinDHT = 5;	// Broche sur laquelle est connecté le DHT22
 
 void setup(){
 	Serial.begin(115200);	// débuging
-	delay(10);	// Le temps que ça se stabilise
+	delay(1000);	// Le temps que ça se stabilise
 }
 
 void loop(){
@@ -21,13 +21,13 @@ void loop(){
 	int err;
 
 	if((err = DHT.read2(pinDHT, &temperature, &humidite, NULL)) != SimpleDHTErrSuccess){
-		Serial.print("Erreur de lecture, err=");
+		Serial.print("\nErreur de lecture, err=");
 		Serial.println(err);
 	} else {
-		Serial.print("Sample OK: ");
+		Serial.print("\nSample OK: ");
 		Serial.print(temperature); Serial.print(" *C, ");
 		Serial.print(humidite); Serial.println(" RH%");
 	}
 
-	delay(2500);
+	ESP.deepSleep(3 * 1e6);
 }
