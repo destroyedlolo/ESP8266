@@ -17,10 +17,39 @@ int pinDHT = 5;	// Broche sur laquelle est connecté le DHT22
 OneWire oneWire(2);
 OWBus bus(&oneWire);
 
+#include <ESP8266WiFi.h>
+#include <PubSubClient.h>	/* https://pubsubclient.knolleary.net/api.html */
+#include "Maison.h"	// Paramètres de mon réseau (WIFI_*, MQTT_*, ...)
+#define MQTT_CLIENT "TestDHT"
+#define MQTT_Topic "TestDHT"
+WiFiClient clientWiFi;
+PubSubClient clientMQTT(clientWiFi);
 
 void setup(){
 	Serial.begin(115200);	// débuging
 	delay(1000);	// Le temps que ça se stabilise
+
+	Serial.println("Connexion WiFi");
+	WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+	while(WiFi.status() != WL_CONNECTED){
+		delay(500);
+		Serial.print(".");
+	}
+	Serial.print("ok : adresse ");
+	Serial.println(WiFi.localIP());
+
+	Serial.println("Connexion MQTT");
+	clientMQTT.setServer(BROKER_HOST, BROKER_PORT);
+	while(!clientMQTT.connected()){
+		if(clientMQTT.connect(MQTT_CLIENT)){
+			Serial.println("connecté");
+			break;
+		} else {
+			Serial.print("Echec, rc:");
+			Serial.println(clientMQTT.state());
+			delay(1000);	// Test dans 1 seconde
+		}
+	}
 }
 
 void loop(){
@@ -41,5 +70,13 @@ void loop(){
 	float t = sonde.getTemperature() - 0.0208544495;
 	Serial.println( t );
 
-	ESP.deepSleep(30 * 1e6);
+	String dt( temperature );
+	dt += ',';
+	dt += t;
+	dt += ',';
+	dt += humidite;
+	Serial.println( dt.c_str() );
+	clientMQTT.publish( MQTT_Topic, dt.c_str() );
+
+	ESP.deepSleep(300 * 1e6);
 }
