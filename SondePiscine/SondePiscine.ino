@@ -53,4 +53,7 @@ void setup(){
 #else
 	pinMode(LED_BUILTIN, OUTPUT);
 #endif
+}
 
+void loop(){
+}

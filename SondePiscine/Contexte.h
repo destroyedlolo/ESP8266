@@ -7,6 +7,7 @@
 
 	/* 1-wire */
 #include <OWBus.h>
+#define ONE_WIRE_BUS 2 // Where OW bus is connected to
 
 class Network;
 
@@ -32,9 +33,7 @@ public:
 		}
 
 		if( !this->RTCvalid ){	// Initial values
-			keep.timeoffset = 0; // Reset timekeeper
 			keep.key = ESP.getFlashChipId();
-			keep.status = Steps::STARTUP_STARTUP;
 
 			/* RTCvalid remains invalid in order to let other modules
 			 * to initialise themselves to default values
@@ -44,17 +43,6 @@ public:
 		offset = sizeof(keep);
 	}
 
-	void setStatus( enum Steps s ){
-		this->keep.status = s;
-		this->save();
-	}
-	enum Steps getStatus( void ){ return this->keep.status; }
-
-	bool getDaylight( void ){ return this->keep.daylight; }
-	void setDaylight( bool v ){
-		this->keep.daylight = v;
-		this->save();
-	}
 
 	void setNetwork( Network *n ){ net = n; }
 
@@ -68,22 +56,6 @@ public:
 	void save( void ){
 		ESP.rtcUserMemoryWrite(0, (uint32_t *)&this->keep, sizeof(this->keep));
 //		RTCvalid = true;
-	}
-
-		/* Store current time offset before going to deep sleep 
-		 *
-		 * This methods *MUST* be called just before deepsleep otherwise
-		 * the offset will be corrupted
-		 *
-		 * <- tts : time to stay in deep sleep (ms)
-		 */
-	void keepTimeBeforeSleep( unsigned long tts ){
-		keep.timeoffset += millis() + tts;
-		this->save();
-	}
-
-	unsigned long getTime( void ){
-		return( this->keep.timeoffset + millis() );
 	}
 
 	uint32_t reserveData( uint32_t s ){
