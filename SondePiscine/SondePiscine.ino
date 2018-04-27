@@ -27,8 +27,8 @@
 
 #define ONE_WIRE_BUS 5
 
-#define MQTT_CLIENT "tSondePiscine"
-String MQTT_Topic("tSondePiscine/");	// Topic's root
+#define MQTT_CLIENT "SondePiscine"
+String MQTT_Topic("SondePiscine/");	// Topic's root
 String MQTT_Output = MQTT_Topic + "Message";
 String MQTT_WiFi = MQTT_Topic + "WiFi";
 String MQTT_MQTT = MQTT_Topic + "MQTT";
