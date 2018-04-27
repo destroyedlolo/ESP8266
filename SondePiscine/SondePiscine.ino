@@ -41,7 +41,7 @@ String MQTT_TempInterne = MQTT_Topic + "TempInterne";
 String MQTT_TempPiscine = MQTT_Topic + "TempPiscine";
 String MQTT_Command = MQTT_Topic + "Command";
 
-#define DUREE_SOMMEIL 300e6	// 5 minutes entre chaque mesure
+#define DUREE_SOMMEIL 60e6
 
 	/******
 	* Fin des configurations
@@ -81,6 +81,20 @@ void publish( String &topic, const unsigned long val, bool reconnect=true ){
 	publish( topic, String(val, DEC).c_str(), reconnect );
 }
 
+void handleMQTT(char* topic, byte* payload, unsigned int length){
+	String msg;
+	for(unsigned int i=0;i<length;i++)
+		msg += (char)payload[i];
+
+#	ifdef SERIAL_ENABLED
+	Serial.print( "Message [" );
+	Serial.print( topic );
+	Serial.print( "] : '" );
+	Serial.print( msg );
+	Serial.println( "'" );
+#	endif
+}
+
 void Connexion_MQTT(){
 	LED(LOW);
 #ifdef SERIAL_ENABLED
@@ -89,7 +103,7 @@ void Connexion_MQTT(){
 
 	Duree dMQTT;
 	for( int i=0; i< 240; i++ ){
-		if(clientMQTT.connect(MQTT_CLIENT)){
+		if(clientMQTT.connect(MQTT_CLIENT, false)){	// false prevent commands to be cleared
 			LED(HIGH);
 			dMQTT.Fini();
 
@@ -98,6 +112,7 @@ void Connexion_MQTT(){
 	Serial.println( *dMQTT );
 #endif
 			publish( MQTT_MQTT, *dMQTT, false );
+			clientMQTT.subscribe(MQTT_Command.c_str(), 1);
 			return;
 		} else {
 			Serial.print("Echec, rc:");
@@ -153,6 +168,7 @@ void setup(){
 #endif
 
 	clientMQTT.setServer(BROKER_HOST, BROKER_PORT);
+	clientMQTT.setCallback( handleMQTT );
 	publish( MQTT_WiFi, *dwifi );
 }
 
@@ -184,5 +200,9 @@ void loop(){
 		publish( MQTT_TempPiscine, String( temp ).c_str() );
 	}
 
-	ESP.deepSleep(DUREE_SOMMEIL);	// On essaiera plus tard
+	if(clientMQTT.connected())
+			clientMQTT.loop();
+
+	ESP.deepSleep(DUREE_SOMMEIL);
+
 }
