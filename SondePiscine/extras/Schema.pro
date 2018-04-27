@@ -1,4 +1,4 @@
-update=ven. 30 mars 2018 22:45:49 CEST
+update=ven. 27 avril 2018 22:25:36 CEST
 version=1
 last_client=kicad
 [pcbnew]
@@ -61,3 +61,5 @@ LibName29=valves
 LibName30=ESP8266
 LibName31=kicad/kicad-library/library/device
 LibName32=/home/laurent/bidon/KiCad/1wire
+LibName33=kicad/kicad-library/library/Battery_Management
+LibName34=kicad/KiCad-symbols/IEC-60617
