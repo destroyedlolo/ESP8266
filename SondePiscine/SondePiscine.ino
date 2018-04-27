@@ -53,20 +53,24 @@ String MQTT_Command = MQTT_Topic + "Command";
 extern "C" {
   #include "user_interface.h"
 }
-
 ADC_MODE(ADC_VCC);	// Nécessaire pour avoir la tension d'alimentation
 
 #include <OWBus.h>
 #include <OWBus/DS18B20.h>
-OneWire oneWire(ONE_WIRE_BUS, true);	// Initialize oneWire library with internal pullup (https://github.com/destroyedlolo/OneWire)
+OneWire oneWire(ONE_WIRE_BUS, true);	// Initialise la bibliothèque en activant le pullup (https://github.com/destroyedlolo/OneWire)
 OWBus bus(&oneWire);
 
-#include <PubSubClient.h>
+#include <PubSubClient.h>	// Il faut la version permettant un QoS > 0 (/ESP/TrucAstuces/MQTT_ESP8266/)
 WiFiClient clientWiFi;
 PubSubClient clientMQTT(clientWiFi);
 
 void Connexion_MQTT();
 
+/* Publie un message MQTT
+ * -> topic, msg : les informations à publier
+ *		reconnect : indique s'il faut se reconnecter si la connexion est perdu
+ *			(si false, on ignore le message si deconnecté)
+ */
 void publish( String &topic, const char *msg, bool reconnect=true ){
 	if(!clientMQTT.connected()){
 		if( reconnect )
@@ -81,18 +85,29 @@ void publish( String &topic, const unsigned long val, bool reconnect=true ){
 	publish( topic, String(val, DEC).c_str(), reconnect );
 }
 
+/* Réception d'une commande MQTT 
+ */
 void handleMQTT(char* topic, byte* payload, unsigned int length){
-	String msg;
+	String cmd;
 	for(unsigned int i=0;i<length;i++)
-		msg += (char)payload[i];
+		cmd += (char)payload[i];
 
 #	ifdef SERIAL_ENABLED
 	Serial.print( "Message [" );
 	Serial.print( topic );
 	Serial.print( "] : '" );
-	Serial.print( msg );
+	Serial.print( cmd );
 	Serial.println( "'" );
 #	endif
+
+		/* Extrait la commande et son argument */
+	const int idx = cmd.indexOf(' ');
+	String arg;
+	if(idx != -1){
+		arg = cmd.substring(idx + 1);
+		cmd = cmd.substring(0, idx);
+	}
+
 }
 
 void Connexion_MQTT(){
