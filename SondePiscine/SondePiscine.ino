@@ -12,7 +12,7 @@
 	* Configurations
 	********/
 
-#if 0		
+#if 1		
 	/* La LED est allumée pendant la recherche du réseau et l'établissement
 	 * du MQTT
 	 */
@@ -25,12 +25,16 @@
 #	define SERIAL_ENABLED
 #endif
 
-#define MQTT_CLIENT "SondePiscine"
-String MQTT_Topic("SondePiscine/");	// Topic's root
+#define ONE_WIRE_BUS 5
+
+#define MQTT_CLIENT "tSondePiscine"
+String MQTT_Topic("tSondePiscine/");	// Topic's root
 String MQTT_Output = MQTT_Topic + "Message";
 String MQTT_WiFi = MQTT_Topic + "WiFi";
 String MQTT_MQTT = MQTT_Topic + "MQTT";
 String MQTT_VCC = MQTT_Topic + "Vcc";
+String MQTT_TempInterne = MQTT_Topic + "TempInterne";
+String MQTT_TempPiscine = MQTT_Topic + "TempPiscine";
 
 #define DUREE_SOMMEIL 300e6	// 5 minutes entre chaque mesure
 
@@ -46,6 +50,11 @@ extern "C" {
 }
 
 ADC_MODE(ADC_VCC);	// Nécessaire pour avoir la tension d'alimentation
+
+#include <OWBus.h>
+#include <OWBus/DS18B20.h>
+OneWire oneWire(ONE_WIRE_BUS, true);	// Initialize oneWire library with internal pullup (https://github.com/destroyedlolo/OneWire)
+OWBus bus(&oneWire);
 
 #include <PubSubClient.h>
 WiFiClient clientWiFi;
@@ -148,6 +157,27 @@ void loop(){
 	Serial.println( ESP.getVcc() );
 #endif
 	publish( MQTT_VCC, ESP.getVcc() );
+
+	DS18B20 SondeTempInterne(bus, 0x2882b25e09000015);
+	DS18B20 SondePiscine( bus, 0x28ff8fbf711703c3);
+
+	float temp =  SondeTempInterne.getTemperature( false );
+	if( SondeTempInterne.isValidScratchpad() ){	// Verify this probe is here
+#ifdef SERIAL_ENABLED
+		Serial.print("Temperature Interne :");
+		Serial.println( temp );
+#endif
+		publish( MQTT_TempInterne, String( temp ).c_str() );
+	}
+
+	temp = SondePiscine.getTemperature( false );
+	if( SondePiscine.isValidScratchpad() ){	// Verify this probe is here
+#ifdef SERIAL_ENABLED
+		Serial.print("Temperature piscine :");
+		Serial.println( temp );
+#endif
+		publish( MQTT_TempPiscine, String( temp ).c_str() );
+	}
 
 	ESP.deepSleep(DUREE_SOMMEIL);	// On essaiera plus tard
 }
