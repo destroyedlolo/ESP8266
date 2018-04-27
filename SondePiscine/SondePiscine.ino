@@ -11,30 +11,35 @@
 	/*******
 	* Configurations
 	********/
+#define DEV	// On est mode developpement
 
-#if 1		
-	/* La LED est allumée pendant la recherche du réseau et l'établissement
-	 * du MQTT
-	 */
-#	define LED(x)	{ digitalWrite(LED_BUILTIN, x); }
-#else
+#ifdef DEV
+#	define MQTT_CLIENT "SondePiscine-Dev"
+
 	/* Message de Debug sur le tx.
 	 * Pas de LED vu qu'il est sur le même PIN
 	 */
 #	define LED(x)	{ }
 #	define SERIAL_ENABLED
+#else
+#	define MQTT_CLIENT "SondePiscine"
+
+	/* La LED est allumée pendant la recherche du réseau et l'établissement
+	 * du MQTT
+	 */
+#	define LED(x)	{ digitalWrite(LED_BUILTIN, x); }
 #endif
 
 #define ONE_WIRE_BUS 5
 
-#define MQTT_CLIENT "SondePiscine"
-String MQTT_Topic("SondePiscine/");	// Topic's root
+String MQTT_Topic = String(MQTT_CLIENT) + "/";	// Topic's root
 String MQTT_Output = MQTT_Topic + "Message";
 String MQTT_WiFi = MQTT_Topic + "WiFi";
 String MQTT_MQTT = MQTT_Topic + "MQTT";
 String MQTT_VCC = MQTT_Topic + "Vcc";
 String MQTT_TempInterne = MQTT_Topic + "TempInterne";
 String MQTT_TempPiscine = MQTT_Topic + "TempPiscine";
+String MQTT_Command = MQTT_Topic + "Command";
 
 #define DUREE_SOMMEIL 300e6	// 5 minutes entre chaque mesure
 
@@ -116,10 +121,10 @@ void setup(){
 #endif
 
 	Duree dwifi;
-#if 1
-	WiFi.begin( DOMO_SSID, DOMO_PASSWORD );	// Connexion à mon réseau domotique
-#else
+#ifdef DEV
 	WiFi.begin( WIFI_SSID, WIFI_PASSWORD );	// Connexion à mon réseau domestique
+#else
+	WiFi.begin( DOMO_SSID, DOMO_PASSWORD );	// Connexion à mon réseau domotique
 #endif
 
 	for( int i=0; i< 240; i++ ){
