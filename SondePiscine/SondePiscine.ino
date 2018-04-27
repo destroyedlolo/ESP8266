@@ -41,11 +41,22 @@ String MQTT_TempInterne = MQTT_Topic + "TempInterne";
 String MQTT_TempPiscine = MQTT_Topic + "TempPiscine";
 String MQTT_Command = MQTT_Topic + "Command";
 
-#define DUREE_SOMMEIL 60e6
+	/* Paramètres par défaut */
+	/* Durées (secondes) */
+#define DEF_DUREE_SOMMEIL 60	// Sommeil entre 2 acquisitions
+#define DEF_EVEILLE	60			// Durée où il faut rester éveillé après avoir recu une commande
 
 	/******
 	* Fin des configurations
 	*******/
+
+	/* Configuration actuelle */
+unsigned long duree_sommeil,
+	duree_eveille;
+
+unsigned long prochaine_aquisition = 0,
+	prochain_endormissement = 0;
+
 #include <ESP8266WiFi.h>
 #include <Maison.h>		// Paramettre de mon réseau
 #include "Duree.h"
@@ -85,8 +96,24 @@ void publish( String &topic, const unsigned long val, bool reconnect=true ){
 	publish( topic, String(val, DEC).c_str(), reconnect );
 }
 
+inline void logmsg( const char *msg ){
+	publish( MQTT_Output, msg );
+#	ifdef SERIAL_ENABLED
+	Serial.println( msg );
+#endif
+}
+inline void logmsg( String &msg ){ logmsg( msg.c_str() ); }
+
 /* Réception d'une commande MQTT 
  */
+const struct _command {
+	const char *nom;
+	const char *desc;
+	void (*func)(const String &, const String &);
+} commands[] = {
+	{ NULL, NULL, NULL }
+};
+
 void handleMQTT(char* topic, byte* payload, unsigned int length){
 	String cmd;
 	for(unsigned int i=0;i<length;i++)
@@ -108,6 +135,16 @@ void handleMQTT(char* topic, byte* payload, unsigned int length){
 		cmd = cmd.substring(0, idx);
 	}
 
+	if( cmd == "?" ){	// Liste des commandes connues
+		String rep;
+		if( arg.length() ) {
+			rep = arg + " : ";
+		} else {
+			rep = "Liste des commandes reconnues : ";
+		}
+
+		logmsg( rep );
+	}
 }
 
 void Connexion_MQTT(){
@@ -139,7 +176,7 @@ void Connexion_MQTT(){
 #ifdef SERIAL_ENABLED
 	Serial.println("Impossible de se connecter au MQTT");
 #endif
-	ESP.deepSleep(DUREE_SOMMEIL);	// On essaiera plus tard
+	ESP.deepSleep(duree_sommeil);	// On essaiera plus tard
 }
 
 void setup(){
@@ -173,7 +210,7 @@ void setup(){
 #ifdef SERIAL_ENABLED
 			Serial.println("Impossible de se connecter");
 #endif
-			ESP.deepSleep(DUREE_SOMMEIL);	// On essaiera plus tard
+			ESP.deepSleep(duree_sommeil);	// On essaiera plus tard
 		}
 
 	dwifi.Fini();
@@ -218,6 +255,8 @@ void loop(){
 	if(clientMQTT.connected())
 			clientMQTT.loop();
 
-	ESP.deepSleep(DUREE_SOMMEIL);
-
+#ifdef SERIAL_ENABLED
+		Serial.println( "Dodo ..." );
+#endif
+	ESP.deepSleep(/* duree_sommeil */ 60e6);
 }
