@@ -154,6 +154,34 @@ bool func_status( const String & ){
 	return true;
 }
 
+bool func_delai( const String &arg ){
+	int n = arg.toInt();
+
+	if( n > 0){
+		Sommeil.setConsigne( n );
+		String msg = "Délai changé à ";
+		msg += n;
+		logmsg( msg );
+	} else
+		logmsg( "Argument invalide : Délai inchangé" );
+
+	return true;
+}
+
+bool func_att( const String &arg ){
+	int n = arg.toInt();
+
+	if( n > 0){
+		EveilInteractif.setConsigne( n );
+		String msg = "Attente changée à ";
+		msg += n;
+		logmsg( msg );
+	} else
+		logmsg( "Argument invalide : Attente inchangée" );
+
+	return true;
+}
+
 bool func_dodo( const String & ){
 	EveilInteractif.setProchain( 0 );
 	return false;
@@ -179,6 +207,8 @@ const struct _command {
 	bool (*func)( const String & );	// true : raz du timer d'éveil
 } commands[] = {
 	{ "status", "Configuration courante", func_status },
+	{ "delai", "Délai entre chaque échantillons (secondes)", func_delai },
+	{ "attente", "Attend <n> secondes l'arrivée de nouvelles commandes", func_att },
 	{ "dodo", "Sort du mode interactif et place l'ESP en sommeil", func_dodo },
 	{ "reste", "Reste encore <n> secondes en mode interactif", func_reste },
 	{ NULL, NULL, NULL }
