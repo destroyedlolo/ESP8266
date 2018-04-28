@@ -9,7 +9,7 @@
 
 
 	/*******
-	* Configurations
+	* Paramétrage
 	********/
 #define DEV	// On est mode developpement
 
@@ -47,18 +47,50 @@ String MQTT_Command = MQTT_Topic + "Command";
 #define DEF_EVEILLE	60			// Durée où il faut rester éveillé après avoir recu une commande
 
 	/******
-	* Fin des configurations
+	* Fin du paramétrage
 	*******/
 
-	/* Configuration actuelle */
-unsigned long duree_sommeil,
-	duree_eveille;
 
-unsigned long prochaine_aquisition = 0,
-	prochain_endormissement = 0;
+	/*******
+	* Gestion des configurations
+	********/
 
+#include <KeepInRTC.h>
+KeepInRTC kir;	// Gestionnaire de la RTC
+
+class Config : public KeepInRTC::KeepMe {
+	unsigned long consigne;		// Consigne à sauvegarder
+	unsigned long prochaine;	// prochaine échéance
+
+public:
+	Config() : KeepInRTC::KeepMe( kir, (uint32_t *)&this->consigne, sizeof(this->consigne) ){}
+
+	void setConsigne( unsigned long val ){	this->consigne = val; }
+	unsigned long getConsigne( void ){ return this->consigne; }
+
+	/* Réinitialise la consigne si nécessaire.
+	 * -> val : valeur par défaut
+	 * <- true si la RTC était invalide
+	 */
+	bool begin( unsigned long val ){
+		if( !kir.isValid() ){
+			this->setConsigne( val );
+			this->save();
+			return true;
+		}
+		return false;
+	}
+};
+
+Config Sommeil;			// Sommeil entre 2 acquisitions
+Config EveilInteractif;	// Temps pendant lequel il faut rester éveillé en attendant des ordres.
+
+
+	/*******
+	* Gestion de la communication
+	********/
 #include <ESP8266WiFi.h>
-#include <Maison.h>		// Paramettre de mon réseau
+#include <Maison.h>		// Paramètres de mon réseau
 #include "Duree.h"
 
 extern "C" {
@@ -104,46 +136,82 @@ inline void logmsg( const char *msg ){
 }
 inline void logmsg( String &msg ){ logmsg( msg.c_str() ); }
 
-/* Réception d'une commande MQTT 
- */
+
+
+/***********
+ * Gestion des commandes MQTT
+ ***********/
+void func_status( const String & ){
+	String msg = "Délai acquisition : ";
+	msg += Sommeil.getConsigne();
+	msg += "\nEveil suite à commande : ";
+	msg += EveilInteractif.getConsigne();
+
+	logmsg( msg );
+}
+
 const struct _command {
 	const char *nom;
 	const char *desc;
-	void (*func)(const String &, const String &);
+	void (*func)( const String & );
 } commands[] = {
+	{ "status", "Configuration courante", func_status },
 	{ NULL, NULL, NULL }
 };
 
 void handleMQTT(char* topic, byte* payload, unsigned int length){
-	String cmd;
+	String ordre;
 	for(unsigned int i=0;i<length;i++)
-		cmd += (char)payload[i];
+		ordre += (char)payload[i];
 
 #	ifdef SERIAL_ENABLED
 	Serial.print( "Message [" );
 	Serial.print( topic );
 	Serial.print( "] : '" );
-	Serial.print( cmd );
+	Serial.print( ordre );
 	Serial.println( "'" );
 #	endif
 
 		/* Extrait la commande et son argument */
-	const int idx = cmd.indexOf(' ');
+	const int idx = ordre.indexOf(' ');
 	String arg;
 	if(idx != -1){
-		arg = cmd.substring(idx + 1);
-		cmd = cmd.substring(0, idx);
+		arg = ordre.substring(idx + 1);
+		ordre = ordre.substring(0, idx);
 	}
 
-	if( cmd == "?" ){	// Liste des commandes connues
+	if( ordre == "?" ){	// Liste des commandes connues
 		String rep;
 		if( arg.length() ) {
 			rep = arg + " : ";
+
+			for( const struct _command *cmd = commands; cmd->nom; cmd++ ){
+				if( arg == cmd->nom && cmd->desc ){
+					rep += cmd->desc;
+					break;	// Pas besoin de continuer la commande a été trouvée
+				}
+			}
 		} else {
-			rep = "Liste des commandes reconnues : ";
+			rep = "Liste des commandes reconnues :";
+
+			for( const struct _command *cmd = commands; cmd->nom; cmd++ ){
+				rep += ' ';
+				rep += cmd->nom;
+			}
 		}
 
 		logmsg( rep );
+	} else {
+Serial.print( "Recherche de l'ordre '" );
+Serial.print( ordre );
+Serial.println( "'" );
+
+		for( const struct _command *cmd = commands; cmd->nom; cmd++ ){
+			if( ordre == cmd->nom && cmd->func ){
+				cmd->func( arg );
+				break;
+			}
+		}
 	}
 }
 
@@ -176,7 +244,7 @@ void Connexion_MQTT(){
 #ifdef SERIAL_ENABLED
 	Serial.println("Impossible de se connecter au MQTT");
 #endif
-	ESP.deepSleep(duree_sommeil);	// On essaiera plus tard
+	ESP.deepSleep( Sommeil.getConsigne() );	// On essaiera plus tard
 }
 
 void setup(){
@@ -186,6 +254,9 @@ void setup(){
 #else
 	pinMode(LED_BUILTIN, OUTPUT);
 #endif
+
+	Sommeil.begin(DEF_DUREE_SOMMEIL);
+	EveilInteractif.begin(DEF_EVEILLE);
 
 	Duree dwifi;
 #ifdef DEV
@@ -210,7 +281,7 @@ void setup(){
 #ifdef SERIAL_ENABLED
 			Serial.println("Impossible de se connecter");
 #endif
-			ESP.deepSleep(duree_sommeil);	// On essaiera plus tard
+			ESP.deepSleep( Sommeil.getConsigne() );	// On essaiera plus tard
 		}
 
 	dwifi.Fini();
