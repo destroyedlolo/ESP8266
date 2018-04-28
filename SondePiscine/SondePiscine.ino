@@ -11,7 +11,7 @@
 	/*******
 	* Paramétrage
 	********/
-#define DEV	// On est mode developpement
+/* #define DEV	// On est mode developpement */
 
 #ifdef DEV
 #	define MQTT_CLIENT "SondePiscine-Dev"
@@ -43,7 +43,7 @@ String MQTT_Command = MQTT_Topic + "Command";
 
 	/* Paramètres par défaut */
 	/* Durées (secondes) */
-#define DEF_DUREE_SOMMEIL 30	// Sommeil entre 2 acquisitions
+#define DEF_DUREE_SOMMEIL 300	// Sommeil entre 2 acquisitions
 #define DEF_EVEILLE	60			// Durée où il faut rester éveillé après avoir recu une commande
 
 	/******
