@@ -160,30 +160,37 @@ const struct _command {
 };
 
 void handleMQTT(char* topic, byte* payload, unsigned int length){
-	String cmd;
+	String ordre;
 	for(unsigned int i=0;i<length;i++)
-		cmd += (char)payload[i];
+		ordre += (char)payload[i];
 
 #	ifdef SERIAL_ENABLED
 	Serial.print( "Message [" );
 	Serial.print( topic );
 	Serial.print( "] : '" );
-	Serial.print( cmd );
+	Serial.print( ordre );
 	Serial.println( "'" );
 #	endif
 
 		/* Extrait la commande et son argument */
-	const int idx = cmd.indexOf(' ');
+	const int idx = ordre.indexOf(' ');
 	String arg;
 	if(idx != -1){
-		arg = cmd.substring(idx + 1);
-		cmd = cmd.substring(0, idx);
+		arg = ordre.substring(idx + 1);
+		ordre = ordre.substring(0, idx);
 	}
 
-	if( cmd == "?" ){	// Liste des commandes connues
+	if( ordre == "?" ){	// Liste des commandes connues
 		String rep;
 		if( arg.length() ) {
 			rep = arg + " : ";
+
+			for( const struct _command *cmd = commands; cmd->nom; cmd++ ){
+				if( arg == cmd->nom && cmd->desc ){
+					rep += cmd->desc;
+					break;	// Pas besoin de continuer la commande a été trouvée
+				}
+			}
 		} else {
 			rep = "Liste des commandes reconnues :";
 
@@ -194,6 +201,17 @@ void handleMQTT(char* topic, byte* payload, unsigned int length){
 		}
 
 		logmsg( rep );
+	} else {
+Serial.print( "Recherche de l'ordre '" );
+Serial.print( ordre );
+Serial.println( "'" );
+
+		for( const struct _command *cmd = commands; cmd->nom; cmd++ ){
+			if( ordre == cmd->nom && cmd->func ){
+				cmd->func( arg );
+				break;
+			}
+		}
 	}
 }
 
