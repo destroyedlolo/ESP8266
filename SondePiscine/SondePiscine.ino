@@ -43,7 +43,7 @@ String MQTT_Command = MQTT_Topic + "Command";
 
 	/* Paramètres par défaut */
 	/* Durées (secondes) */
-#define DEF_DUREE_SOMMEIL 60	// Sommeil entre 2 acquisitions
+#define DEF_DUREE_SOMMEIL 30	// Sommeil entre 2 acquisitions
 #define DEF_EVEILLE	60			// Durée où il faut rester éveillé après avoir recu une commande
 
 	/******
@@ -202,10 +202,6 @@ void handleMQTT(char* topic, byte* payload, unsigned int length){
 
 		logmsg( rep );
 	} else {
-Serial.print( "Recherche de l'ordre '" );
-Serial.print( ordre );
-Serial.println( "'" );
-
 		for( const struct _command *cmd = commands; cmd->nom; cmd++ ){
 			if( ordre == cmd->nom && cmd->func ){
 				cmd->func( arg );
@@ -251,12 +247,16 @@ void setup(){
 #ifdef SERIAL_ENABLED
 	Serial.begin(115200);
 	delay(100);
+	Serial.println("Réveil");
 #else
 	pinMode(LED_BUILTIN, OUTPUT);
 #endif
 
-	Sommeil.begin(DEF_DUREE_SOMMEIL);
-	EveilInteractif.begin(DEF_EVEILLE);
+	if( Sommeil.begin(DEF_DUREE_SOMMEIL) | EveilInteractif.begin(DEF_EVEILLE) ){	// ou logique sinon le begin() d'EveilInteractif ne sera jamais appelé
+#ifdef SERIAL_ENABLED
+		Serial.println("Valeur par défaut");
+#endif
+	}
 
 	Duree dwifi;
 #ifdef DEV
