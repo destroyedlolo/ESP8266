@@ -63,7 +63,7 @@ class Config : public KeepInRTC::KeepMe {
 	unsigned long prochaine;	// prochaine échéance
 
 public:
-	Config() : KeepInRTC::KeepMe( kir, (uint32_t *)&this->consigne, sizeof(this->consigne) ){}
+	Config() : KeepInRTC::KeepMe( kir, (uint32_t *)&this->consigne, sizeof(this->consigne) ), prochaine(0) {}
 
 	void setConsigne( unsigned long val ){	this->consigne = val; }
 	unsigned long getConsigne( void ){ return this->consigne; }
@@ -212,6 +212,8 @@ void handleMQTT(char* topic, byte* payload, unsigned int length){
 			}
 		}
 	}
+		
+	EveilInteractif.setProchain( millis() + EveilInteractif.getConsigne() * 1e3 );	// Raz du timer d'éveil
 }
 
 void Connexion_MQTT(){
@@ -299,38 +301,45 @@ void setup(){
 }
 
 void loop(){
+	if( Sommeil.getProchain() < millis() ){	// il est temps de faire une nouvelle acquisition
 #ifdef SERIAL_ENABLED
-	Serial.print("Tension d'alimentation :");
-	Serial.println( ESP.getVcc() );
+		Serial.print("Tension d'alimentation :");
+		Serial.println( ESP.getVcc() );
 #endif
-	publish( MQTT_VCC, ESP.getVcc() );
+		publish( MQTT_VCC, ESP.getVcc() );
 
-	DS18B20 SondeTempInterne(bus, 0x2882b25e09000015);
-	DS18B20 SondePiscine( bus, 0x28ff8fbf711703c3);
+		DS18B20 SondeTempInterne(bus, 0x2882b25e09000015);
+		DS18B20 SondePiscine( bus, 0x28ff8fbf711703c3);
 
-	float temp =  SondeTempInterne.getTemperature( false );
-	if( SondeTempInterne.isValidScratchpad() ){	// Verify this probe is here
+		float temp =  SondeTempInterne.getTemperature( false );
+		if( SondeTempInterne.isValidScratchpad() ){	// On s'assure que la sonde est présente
 #ifdef SERIAL_ENABLED
-		Serial.print("Temperature Interne :");
-		Serial.println( temp );
+			Serial.print("Température Interne :");
+			Serial.println( temp );
 #endif
-		publish( MQTT_TempInterne, String( temp ).c_str() );
-	}
+			publish( MQTT_TempInterne, String( temp ).c_str() );
+		}
 
-	temp = SondePiscine.getTemperature( false );
-	if( SondePiscine.isValidScratchpad() ){	// Verify this probe is here
+		temp = SondePiscine.getTemperature( false );
+		if( SondePiscine.isValidScratchpad() ){	// On s'assure que la sonde est présente
 #ifdef SERIAL_ENABLED
-		Serial.print("Temperature piscine :");
-		Serial.println( temp );
+			Serial.print("Température piscine :");
+			Serial.println( temp );
 #endif
-		publish( MQTT_TempPiscine, String( temp ).c_str() );
+			publish( MQTT_TempPiscine, String( temp ).c_str() );
+		}
+
+		Sommeil.setProchain( millis() + Sommeil.getConsigne() * 1e3 );	// Calcul de la prochaine acquisition
 	}
 
 	if(clientMQTT.connected())
 			clientMQTT.loop();
 
+	if( EveilInteractif.getProchain() < millis() ){	// Pas de session interactive en cour
 #ifdef SERIAL_ENABLED
-		Serial.println( "Dodo ..." );
+			Serial.println( "Dodo ..." );
 #endif
-	ESP.deepSleep( Sommeil.getConsigne() * 1e6);
+		ESP.deepSleep( Sommeil.getConsigne() * 1e6);
+	} else 
+		delay( 5000 );	// Attend 5s avant de vérifier à nouveau s'il y a des commandes MQTT
 }
