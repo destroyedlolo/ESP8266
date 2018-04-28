@@ -240,7 +240,7 @@ void Connexion_MQTT(){
 #ifdef SERIAL_ENABLED
 	Serial.println("Impossible de se connecter au MQTT");
 #endif
-	ESP.deepSleep( Sommeil.getConsigne() );	// On essaiera plus tard
+	ESP.deepSleep( Sommeil.getConsigne() * 1e6 );	// On essaiera plus tard
 }
 
 void setup(){
@@ -281,7 +281,7 @@ void setup(){
 #ifdef SERIAL_ENABLED
 			Serial.println("Impossible de se connecter");
 #endif
-			ESP.deepSleep( Sommeil.getConsigne() );	// On essaiera plus tard
+			ESP.deepSleep( Sommeil.getConsigne() * 1e6 );	// On essaiera plus tard
 		}
 
 	dwifi.Fini();
@@ -329,5 +329,5 @@ void loop(){
 #ifdef SERIAL_ENABLED
 		Serial.println( "Dodo ..." );
 #endif
-	ESP.deepSleep(/* duree_sommeil */ 60e6);
+	ESP.deepSleep( Sommeil.getConsigne() * 1e6);
 }
