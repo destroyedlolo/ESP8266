@@ -80,6 +80,9 @@ public:
 		}
 		return false;
 	}
+
+	void setProchain( unsigned long val ){	this->prochaine = val; }
+	unsigned long getProchain( void ){ return this->prochaine; }
 };
 
 Config Sommeil;			// Sommeil entre 2 acquisitions
