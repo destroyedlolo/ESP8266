@@ -136,13 +136,26 @@ inline void logmsg( const char *msg ){
 }
 inline void logmsg( String &msg ){ logmsg( msg.c_str() ); }
 
-/* Réception d'une commande MQTT 
- */
+
+
+/***********
+ * Gestion des commandes MQTT
+ ***********/
+void func_status( const String & ){
+	String msg = "Délai acquisition : ";
+	msg += Sommeil.getConsigne();
+	msg += "\nEveil suite à commande : ";
+	msg += EveilInteractif.getConsigne();
+
+	logmsg( msg );
+}
+
 const struct _command {
 	const char *nom;
 	const char *desc;
-	void (*func)(const String &, const String &);
+	void (*func)( const String & );
 } commands[] = {
+	{ "status", "Configuration courante", func_status },
 	{ NULL, NULL, NULL }
 };
 
@@ -172,7 +185,12 @@ void handleMQTT(char* topic, byte* payload, unsigned int length){
 		if( arg.length() ) {
 			rep = arg + " : ";
 		} else {
-			rep = "Liste des commandes reconnues : ";
+			rep = "Liste des commandes reconnues :";
+
+			for( const struct _command *cmd = commands; cmd->nom; cmd++ ){
+				rep += ' ';
+				rep += cmd->nom;
+			}
 		}
 
 		logmsg( rep );
