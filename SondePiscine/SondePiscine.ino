@@ -144,21 +144,43 @@ inline void logmsg( String &msg ){ logmsg( msg.c_str() ); }
 /***********
  * Gestion des commandes MQTT
  ***********/
-void func_status( const String & ){
+bool func_status( const String & ){
 	String msg = "Délai acquisition : ";
 	msg += Sommeil.getConsigne();
 	msg += "\nEveil suite à commande : ";
 	msg += EveilInteractif.getConsigne();
 
 	logmsg( msg );
+	return true;
+}
+
+bool func_dodo( const String & ){
+	EveilInteractif.setProchain( 0 );
+	return false;
+}
+
+bool func_reste( const String &arg ){
+	int n = arg.toInt();
+	EveilInteractif.setProchain( millis() + n*1e3 );
+
+	String msg = "Reste encore éveillé pendant ";
+	msg += n;
+	msg += " seconde";
+	if( n > 1 )
+		msg += 's';
+	
+	logmsg( msg );
+	return false;
 }
 
 const struct _command {
 	const char *nom;
 	const char *desc;
-	void (*func)( const String & );
+	bool (*func)( const String & );	// true : raz du timer d'éveil
 } commands[] = {
 	{ "status", "Configuration courante", func_status },
+	{ "dodo", "Sort du mode interactif et place l'ESP en sommeil", func_dodo },
+	{ "reste", "Reste encore <n> secondes en mode interactif", func_reste },
 	{ NULL, NULL, NULL }
 };
 
@@ -183,6 +205,7 @@ void handleMQTT(char* topic, byte* payload, unsigned int length){
 		ordre = ordre.substring(0, idx);
 	}
 
+	bool raz = true;	// Faut-il faire un raz du timer interactif
 	if( ordre == "?" ){	// Liste des commandes connues
 		String rep;
 		if( arg.length() ) {
@@ -207,13 +230,14 @@ void handleMQTT(char* topic, byte* payload, unsigned int length){
 	} else {
 		for( const struct _command *cmd = commands; cmd->nom; cmd++ ){
 			if( ordre == cmd->nom && cmd->func ){
-				cmd->func( arg );
+				raz = cmd->func( arg );
 				break;
 			}
 		}
 	}
-		
-	EveilInteractif.setProchain( millis() + EveilInteractif.getConsigne() * 1e3 );	// Raz du timer d'éveil
+
+	if( raz )		// Raz du timer d'éveil
+		EveilInteractif.setProchain( millis() + EveilInteractif.getConsigne() * 1e3 );
 }
 
 void Connexion_MQTT(){
