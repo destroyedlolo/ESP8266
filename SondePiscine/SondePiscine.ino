@@ -9,7 +9,7 @@
 
 
 	/*******
-	* Configurations
+	* Paramétrage
 	********/
 #define DEV	// On est mode developpement
 
@@ -47,18 +47,50 @@ String MQTT_Command = MQTT_Topic + "Command";
 #define DEF_EVEILLE	60			// Durée où il faut rester éveillé après avoir recu une commande
 
 	/******
-	* Fin des configurations
+	* Fin du paramétrage
 	*******/
 
-	/* Configuration actuelle */
-unsigned long duree_sommeil,
-	duree_eveille;
 
-unsigned long prochaine_aquisition = 0,
-	prochain_endormissement = 0;
+	/*******
+	* Gestion des configurations
+	********/
 
+#include <KeepInRTC.h>
+KeepInRTC kir;	// Gestionnaire de la RTC
+
+class Config : public KeepInRTC::KeepMe {
+	unsigned long consigne;		// Consigne à sauvegarder
+	unsigned long prochaine;	// prochaine échéance
+
+public:
+	Config() : KeepInRTC::KeepMe( kir, (uint32_t *)&this->consigne, sizeof(this->consigne) ){}
+
+	void setConsigne( unsigned long val ){	this->consigne = val; }
+	unsigned long getConsigne( void ){ return this->consigne; }
+
+	/* Réinitialise la consigne si nécessaire.
+	 * -> val : valeur par défaut
+	 * <- true si la RTC était invalide
+	 */
+	bool begin( unsigned long val ){
+		if( !kir.isValid() ){
+			this->setConsigne( val );
+			this->save();
+			return true;
+		}
+		return false;
+	}
+};
+
+Config Sommeil;			// Sommeil entre 2 acquisitions
+Config EveilInteractif;	// Temps pendant lequel il faut rester éveillé en attendant des ordres.
+
+
+	/*******
+	* Gestion de la communication
+	********/
 #include <ESP8266WiFi.h>
-#include <Maison.h>		// Paramettre de mon réseau
+#include <Maison.h>		// Paramètres de mon réseau
 #include "Duree.h"
 
 extern "C" {
@@ -176,7 +208,7 @@ void Connexion_MQTT(){
 #ifdef SERIAL_ENABLED
 	Serial.println("Impossible de se connecter au MQTT");
 #endif
-	ESP.deepSleep(duree_sommeil);	// On essaiera plus tard
+	ESP.deepSleep( Sommeil.getConsigne() );	// On essaiera plus tard
 }
 
 void setup(){
@@ -186,6 +218,9 @@ void setup(){
 #else
 	pinMode(LED_BUILTIN, OUTPUT);
 #endif
+
+	Sommeil.begin(DEF_DUREE_SOMMEIL);
+	EveilInteractif.begin(DEF_EVEILLE);
 
 	Duree dwifi;
 #ifdef DEV
@@ -210,7 +245,7 @@ void setup(){
 #ifdef SERIAL_ENABLED
 			Serial.println("Impossible de se connecter");
 #endif
-			ESP.deepSleep(duree_sommeil);	// On essaiera plus tard
+			ESP.deepSleep( Sommeil.getConsigne() );	// On essaiera plus tard
 		}
 
 	dwifi.Fini();
