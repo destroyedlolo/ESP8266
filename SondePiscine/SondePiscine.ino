@@ -81,7 +81,7 @@ public:
 		return false;
 	}
 
-	void setProchain( unsigned long val ){	this->prochaine = val; }
+	void setProchain( unsigned long val ){	this->prochaine = val; this->save(); }
 	unsigned long getProchain( void ){ return this->prochaine; }
 };
 
