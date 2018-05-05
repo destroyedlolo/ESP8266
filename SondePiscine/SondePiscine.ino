@@ -21,6 +21,8 @@
 	 */
 #	define LED(x)	{ }
 #	define SERIAL_ENABLED
+
+#	define DEF_DUREE_SOMMEIL 30	// Sommeil entre 2 acquisitions
 #else
 #	define MQTT_CLIENT "SondePiscine"
 
@@ -43,8 +45,10 @@ String MQTT_Command = MQTT_Topic + "Command";
 
 	/* Paramètres par défaut */
 	/* Durées (secondes) */
-#define DEF_DUREE_SOMMEIL 300	// Sommeil entre 2 acquisitions
-#define DEF_EVEILLE	60			// Durée où il faut rester éveillé après avoir recu une commande
+#ifndef DEF_DUREE_SOMMEIL
+#	define DEF_DUREE_SOMMEIL 300	// Sommeil entre 2 acquisitions
+#endif
+#define DEF_EVEILLE	60				// Durée où il faut rester éveillé après avoir recu une commande
 
 	/******
 	* Fin du paramétrage
@@ -65,7 +69,7 @@ class Config : public KeepInRTC::KeepMe {
 public:
 	Config() : KeepInRTC::KeepMe( kir, (uint32_t *)&this->consigne, sizeof(this->consigne) ), prochaine(0) {}
 
-	void setConsigne( unsigned long val ){	this->consigne = val; }
+	void setConsigne( unsigned long val ){	this->consigne = val; this->save(); }
 	unsigned long getConsigne( void ){ return this->consigne; }
 
 	/* Réinitialise la consigne si nécessaire.
@@ -81,7 +85,7 @@ public:
 		return false;
 	}
 
-	void setProchain( unsigned long val ){	this->prochaine = val; this->save(); }
+	void setProchain( unsigned long val ){	this->prochaine = val; }
 	unsigned long getProchain( void ){ return this->prochaine; }
 };
 
