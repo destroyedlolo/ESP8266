@@ -5,6 +5,8 @@
  *
  *	provided by "Laurent Faillie"
  *	Licence : "Creative Commons Attribution-NonCommercial 3.0"
+ *
+ *	22/05/2018 - La tension d'alimentation est calculée par plusieurs échantillonages
  */
 
 
@@ -92,6 +94,32 @@ public:
 Config Sommeil;			// Sommeil entre 2 acquisitions
 Config EveilInteractif;	// Temps pendant lequel il faut rester éveillé en attendant des ordres.
 
+class Contexte : public KeepInRTC::KeepMe {
+	struct {
+		bool debug;	// Affiche des messages de debugage
+	} data;
+
+public:
+	Contexte() : KeepInRTC::KeepMe( kir, (uint32_t *)&this->data, sizeof(this->data) ) {}
+
+	bool begin( void ){
+		if( !kir.isValid() ){
+			this->setDebug(false);
+			this->save();
+			return true;
+		}
+		return false;
+	}
+
+	void setDebug( bool adbg ){
+		this->data.debug = adbg; 
+		this->save();
+	}
+
+	bool getDebug( void ){
+		return this->data.debug;
+	}
+} ctx;
 
 	/*******
 	* Gestion de la communication
@@ -153,6 +181,7 @@ bool func_status( const String & ){
 	msg += Sommeil.getConsigne();
 	msg += "\nEveil suite à commande : ";
 	msg += EveilInteractif.getConsigne();
+	msg += ctx.getDebug() ? "\nMessages de Debug" : "\nPas de message de Debug";
 
 	logmsg( msg );
 	return true;
@@ -205,6 +234,13 @@ bool func_reste( const String &arg ){
 	return false;
 }
 
+bool func_debug( const String &arg ){
+	ctx.setDebug( arg.toInt() ? true : false );
+
+	logmsg( ctx.getDebug() ? "Debug activé" : "Debug inactif");
+	return true;
+}
+
 const struct _command {
 	const char *nom;
 	const char *desc;
@@ -215,6 +251,7 @@ const struct _command {
 	{ "attente", "Attend <n> secondes l'arrivée de nouvelles commandes", func_att },
 	{ "dodo", "Sort du mode interactif et place l'ESP en sommeil", func_dodo },
 	{ "reste", "Reste encore <n> secondes en mode interactif", func_reste },
+	{ "debug", "active (1) ou non (0) les messages de debug", func_debug },
 	{ NULL, NULL, NULL }
 };
 
@@ -287,15 +324,17 @@ void Connexion_MQTT(){
 			dMQTT.Fini();
 
 #ifdef SERIAL_ENABLED
-	Serial.print("Duree connexion MQTT :");
-	Serial.println( *dMQTT );
+			Serial.print("Duree connexion MQTT :");
+			Serial.println( *dMQTT );
 #endif
 			publish( MQTT_MQTT, *dMQTT, false );
 			clientMQTT.subscribe(MQTT_Command.c_str(), 1);
 			return;
 		} else {
+#ifdef SERIAL_ENABLED
 			Serial.print("Echec, rc:");
 			Serial.println(clientMQTT.state());
+#endif
 			delay(500);	// Test dans 1 seconde
 		}
 	}
@@ -315,7 +354,7 @@ void setup(){
 	pinMode(LED_BUILTIN, OUTPUT);
 #endif
 
-	if( Sommeil.begin(DEF_DUREE_SOMMEIL) | EveilInteractif.begin(DEF_EVEILLE) ){	// ou logique sinon le begin() d'EveilInteractif ne sera jamais appelé
+	if( Sommeil.begin(DEF_DUREE_SOMMEIL) | EveilInteractif.begin(DEF_EVEILLE) | ctx.begin() ){	// ou logique sinon le begin() d'EveilInteractif ne sera jamais appelé
 #ifdef SERIAL_ENABLED
 		Serial.println("Valeur par défaut");
 #endif
@@ -360,11 +399,9 @@ void setup(){
 
 void loop(){
 	if( Sommeil.getProchain() < millis() ){	// il est temps de faire une nouvelle acquisition
-#ifdef SERIAL_ENABLED
-		Serial.print("Tension d'alimentation :");
-		Serial.println( ESP.getVcc() );
-#endif
-		publish( MQTT_VCC, ESP.getVcc() );
+		int vcctab[3];	// Stocke les différents échantillons de Vcc
+		int nbre = 0;
+		vcctab[nbre++] = ESP.getVcc();
 
 		DS18B20 SondeTempInterne(bus, 0x2882b25e09000015);
 		DS18B20 SondePiscine( bus, 0x28ff8fbf711703c3);
@@ -376,6 +413,7 @@ void loop(){
 			Serial.println( temp );
 #endif
 			publish( MQTT_TempInterne, String( temp ).c_str() );
+			vcctab[nbre++] = ESP.getVcc();
 		}
 
 		temp = SondePiscine.getTemperature( false );
@@ -385,7 +423,35 @@ void loop(){
 			Serial.println( temp );
 #endif
 			publish( MQTT_TempPiscine, String( temp ).c_str() );
+			vcctab[nbre++] = ESP.getVcc();
 		}
+
+		/* Trie des valeurs de Vcc lue */
+		for( int i = 0; i<nbre; i++ )
+			for( int j = 0; j<nbre; j++ ){
+				if(vcctab[i]>vcctab[j]){
+					int t = vcctab[i];
+			    	vcctab[i] = vcctab[j];
+				    vcctab[j] = t;
+				}
+		}
+
+		if(ctx.getDebug()){
+			String msg(nbre);
+			msg += " échantillon(s) pour Vcc :";
+			for( int i=0; i<nbre; i++ ){
+				msg += " ";
+				msg += vcctab[i];
+			}
+			logmsg( msg );
+		}
+
+#ifdef SERIAL_ENABLED
+		Serial.print("Tension d'alimentation :");
+		Serial.println( vcctab[nbre/2] );
+#endif
+		publish( MQTT_VCC, vcctab[nbre/2] );
+
 
 		Sommeil.setProchain( millis() + Sommeil.getConsigne() * 1e3 );	// Calcul de la prochaine acquisition
 	}
