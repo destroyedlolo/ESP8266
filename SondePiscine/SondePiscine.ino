@@ -7,13 +7,14 @@
  *	Licence : "Creative Commons Attribution-NonCommercial 3.0"
  *
  *	22/05/2018 - La tension d'alimentation est calculée par plusieurs échantillonages
+ *	21/06/2018 - Ajoute de l'OTA
  */
 
 
 	/*******
 	* Paramétrage
 	********/
-#define DEV	// On est mode developpement 
+/* #define DEV	// On est mode developpement  */
 
 #ifdef DEV
 #	define MQTT_CLIENT "SondePiscine-Dev"
@@ -125,6 +126,12 @@ public:
 	* Gestion de la communication
 	********/
 #include <ESP8266WiFi.h>
+#include <ESP8266mDNS.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
+
+bool OTA;
+
 #include <Maison.h>		// Paramètres de mon réseau
 #include "Duree.h"
 
@@ -191,10 +198,15 @@ bool func_status( const String & ){
 #endif
 	msg += "\nSketch : ";
 	msg += 	ESP.getSketchSize();
-	msg += ", Free : ";
+	msg += ", Libre : ";
 	msg += ESP.getFreeSketchSpace();
-	msg += "\nFree :";
+	msg += "\nHeap :";
 	msg += ESP.getFreeHeap();
+	msg += "\nAdresse IP :";
+	msg += WiFi.localIP().toString();
+
+	msg += OTA ? "\nOTA en attente": "\nOTA désactivé";
+
 	logmsg( msg );
 	return true;
 }
@@ -253,6 +265,13 @@ bool func_debug( const String &arg ){
 	return true;
 }
 
+bool func_OTA( const String & ){
+	logmsg( "OTA activé" );
+	OTA = true;
+	ArduinoOTA.begin();
+	return true;
+}
+
 const struct _command {
 	const char *nom;
 	const char *desc;
@@ -263,7 +282,8 @@ const struct _command {
 	{ "attente", "Attend <n> secondes l'arrivée de nouvelles commandes", func_att },
 	{ "dodo", "Sort du mode interactif et place l'ESP en sommeil", func_dodo },
 	{ "reste", "Reste encore <n> secondes en mode interactif", func_reste },
-	{ "debug", "active (1) ou non (0) les messages de debug", func_debug },
+	{ "debug", "Active (1) ou non (0) les messages de debug", func_debug },
+	{ "OTA", "Active l'OTA jusqu'au prochain reboot", func_OTA },
 	{ NULL, NULL, NULL }
 };
 
@@ -366,6 +386,8 @@ void setup(){
 	pinMode(LED_BUILTIN, OUTPUT);
 #endif
 
+	ArduinoOTA.setHostname("SondePiscine");
+
 	if( Sommeil.begin(DEF_DUREE_SOMMEIL) | EveilInteractif.begin(DEF_EVEILLE) | ctx.begin() ){	// ou logique sinon le begin() d'EveilInteractif ne sera jamais appelé
 #ifdef SERIAL_ENABLED
 		Serial.println("Valeur par défaut");
@@ -407,6 +429,26 @@ void setup(){
 	clientMQTT.setServer(BROKER_HOST, BROKER_PORT);
 	clientMQTT.setCallback( handleMQTT );
 	publish( MQTT_WiFi, *dwifi );
+
+	ArduinoOTA.onError([](ota_error_t error) {
+		String msg = "Error :";
+		msg += error;
+		switch( error ){
+		case OTA_AUTH_ERROR:
+			msg += " (Auth Failed)"; break;
+		case OTA_BEGIN_ERROR:
+			msg += " (Begin Failed)"; break;
+		case OTA_CONNECT_ERROR:
+			msg += " (Connect Failed)"; break;
+		case OTA_RECEIVE_ERROR:
+			msg += " (Receive Failed)"; break;
+		case OTA_END_ERROR:
+			msg += " (End Failed)"; break;
+		};
+
+		logmsg( msg );
+  	});
+	OTA = false;
 }
 
 void loop(){
@@ -469,7 +511,10 @@ void loop(){
 	}
 
 	if(clientMQTT.connected())
-			clientMQTT.loop();
+		clientMQTT.loop();
+	
+	if(OTA)
+		ArduinoOTA.handle();
 
 	if( EveilInteractif.getProchain() < millis() ){	// Pas de session interactive en cour
 #ifdef SERIAL_ENABLED
