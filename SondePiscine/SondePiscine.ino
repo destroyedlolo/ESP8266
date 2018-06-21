@@ -13,7 +13,7 @@
 	/*******
 	* Paramétrage
 	********/
-/* #define DEV	// On est mode developpement */
+#define DEV	// On est mode developpement 
 
 #ifdef DEV
 #	define MQTT_CLIENT "SondePiscine-Dev"
@@ -182,7 +182,19 @@ bool func_status( const String & ){
 	msg += "\nEveil suite à commande : ";
 	msg += EveilInteractif.getConsigne();
 	msg += ctx.getDebug() ? "\nMessages de Debug" : "\nPas de message de Debug";
-
+#ifdef DEV
+	msg += "\nFlash : ";
+	msg += ESP.getFlashChipSize();
+	msg += " (real : ";
+	msg += ESP.getFlashChipRealSize();
+	msg += ")";
+#endif
+	msg += "\nSketch : ";
+	msg += 	ESP.getSketchSize();
+	msg += ", Free : ";
+	msg += ESP.getFreeSketchSpace();
+	msg += "\nFree :";
+	msg += ESP.getFreeHeap();
 	logmsg( msg );
 	return true;
 }
