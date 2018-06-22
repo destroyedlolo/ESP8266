@@ -367,7 +367,7 @@ void Connexion_MQTT(){
 			Serial.print("Echec, rc:");
 			Serial.println(clientMQTT.state());
 #endif
-			delay(500);	// Test dans 1 seconde
+			delay(500);	// Test dans 0,5 seconde
 		}
 	}
 	LED(HIGH);
